@@ -23,6 +23,7 @@ summary(cars)
 
 You can also embed plots, for example:
 
+##Kat's new section
 ```{r pressure, echo=FALSE}
 plot(pressure)
 ```
