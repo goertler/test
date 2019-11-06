@@ -1,0 +1,77 @@
+---
+title: "Data tidying"
+author: "Pascale"
+date: "11/6/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(tidyr)
+```
+
+
+# read and clean data
+```{r}
+catch_original <- read.csv(url("https://knb.ecoinformatics.org/knb/d1/mn/v2/object/df35b.302.1", method = "libcurl"),
+                    stringsAsFactors = FALSE)
+head(catch_original)
+```
+
+remove `all` column and `notes` column becasue we don't need them.
+```{r}
+catch_data <- catch_original %>% 
+  #select(Region, Year, Chinook, Sockeye, Coho, Pink, Chum)
+  select(-All, -notesRegCode)
+
+head(catch_data)
+```
+
+
+```{r}
+summary(catch_data)
+```
+
+## fix chinook column
+
+use `mutate` to fix Chinook column
+```{r}
+catch_clean <- catch_data %>% 
+  #mutate(Chinook = as.numeric(Chinook))
+  mutate(Chinook = ifelse(Chinook =="I", 1, Chinook)) %>% 
+  mutate(Chinook = as.numeric(Chinook))
+```
+
+
+finding row that was turned into NA
+```{r}
+i <- which(is.na(catch_clean$Chinook))
+i
+```
+
+print row that contains a character rather than a number
+```{r}
+catch_data[i,]
+```
+
+# reshape data
+
+```{r}
+catch_long<-catch_clean %>% 
+  pivot_longer(cols = -c(Region, Year),
+               names_to = "species",
+               values_to = "count")
+head(catch_long)
+```
+
+
+
+# summarize data
+
+# join to region table
