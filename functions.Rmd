@@ -1,0 +1,79 @@
+---
+title: "functions"
+author: "Pascale"
+date: "11/6/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+unnecessary repition example
+```{r}
+airtemps <- c(212, 30.3, 78, 32)
+celsius1 <- (airtemps[1]-32)*5/9
+celsius2 <- (airtemps[2]-32)*5/9
+celsius3 <- (airtemps[3]-32)*5/9
+
+celsius1
+
+```
+
+function example
+```{r}
+fahr_to_celsius <- function(fahr) { #input is fahr
+  celsius <- (fahr-32)*5/9
+  return(celsius)
+}
+
+
+```
+
+use the function
+```{r}
+celsiusf<-fahr_to_celsius(airtemps)
+
+celsiusf
+
+# check if correct to manual version
+celsiusf1<-fahr_to_celsius(airtemps[1])
+celsiusf1 == celsius1
+```
+
+exercise
+```{r}
+celsius_to_fahr <- function(celsius) { 
+  fahr <- (celsius/(5/9))+32
+  return(fahr)
+}
+
+fahr_test<-celsius_to_fahr(celsiusf)
+
+fahr_test
+
+fahr_test1<-celsius_to_fahr(celsiusf1[1])
+fahr_test1 == airtemps[1]
+
+```
+
+for making packages
+```{r}
+library(roxygen2)
+```
+
+```{r}
+#' converts celsius to fahrenheit temperatures
+#'
+#' detailed explanation goes here
+#' @param celsius is the temperature in degress celsius
+#' @return is the temperature in fahrenheit
+celsius_to_fahr <- function(celsius) { 
+  fahr <- (celsius/(5/9))+32
+  return(fahr)
+}
+
+```
+
