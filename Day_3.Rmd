@@ -67,11 +67,111 @@ catch_long<-catch_clean %>%
   pivot_longer(cols = -c(Region, Year),
                names_to = "species",
                values_to = "count")
+
 head(catch_long)
 ```
 
+```{r}
+catch_wide <- catch_long %>% 
+  pivot_wider(names_from = Year,
+              values_from = count)
 
+head(catch_wide)
+```
+
+skip this one
+```{r}
+#catch_long <- catch_long %>% 
+  #rename(catch_thousands=count) %>% 
+  #mutate(catch = catch_thousands * 1000) 
+
+#head(catch_long)
+```
+
+```{r}
+catch_long <- catch_long %>% 
+  mutate(catch = count * 1000) %>% 
+  select(-count)
+
+head(catch_long)
+```
 
 # summarize data
 
+```{r}
+mean_region <- catch_long %>% 
+  group_by(Region, species) %>% 
+  summarise(catch_mean = mean(catch), 
+            num_obs =n())
+
+mean_region
+```
+
+```{r}
+sum_sp <- catch_long %>% 
+  group_by(species) %>% 
+  summarise(sum_catch = sum(catch))
+
+sum_sp
+```
+
+```{r}
+total_sp_pre_1900 <- catch_long %>% 
+  filter(Year < 1900) %>% 
+  group_by(species) %>% 
+  summarise(total = sum(catch)) %>% 
+  arrange(desc(total))
+
+total_sp_pre_1900
+```
+
 # join to region table
+
+```{r}
+region_defs <- read.csv(url("https://knb.ecoinformatics.org/knb/d1/mn/v2/object/df35b.303.1",
+                            method = "libcurl"),
+                        stringsAsFactors = FALSE) %>% 
+    select(code, mgmtArea) 
+    # %>% rename(Region = code)
+
+
+head(region_defs)
+```
+
+```{r}
+catch_joined <- left_join(catch_long, region_defs, by = c("Region" = "code"))
+
+#catch_joined <- left_join(catch_long, region_defs)
+
+head(catch_joined)
+```
+functions that will help join datasets when characters are not identical:
+* trimws - trips white space    
+* tolower - changes to lower case    
+* gsub - replace expressions (- vs. _)
+
+# separate and unite
+```{r}
+site_codes <- data.frame(site = c("HAW-100",
+                                  "HAW-101",
+                                  "OAH-102",
+                                  "OAH-103",
+                                  "MAI-100"),
+                         stringsAsFactors = F)
+```
+
+separate island and site number
+```{r}
+site_codes_split<- site_codes %>% 
+  separate(site, into = c("island", "site_num"), sep="-")
+
+site_codes_split
+```
+
+```{r}
+site_codes_unite<- site_codes_split %>%
+  unite(site.code, island, site_num, sep="_")
+
+site_codes_unite
+```
+
