@@ -1,0 +1,149 @@
+---
+title: "ggplot"
+author: "Pascale"
+date: "11/7/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(leaflet)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(DT)
+library(scales) # install.packages("scales")
+```
+
+# prepare data
+```{r}
+data_url <- "https://knb.ecoinformatics.org/knb/d1/mn/v2/object/urn%3Auuid%3Af119a05b-bbe7-4aea-93c6-85434dcb1c5e"
+
+esc <- tryCatch(
+    read.csv("data/escapement.csv", stringsAsFactors = FALSE),
+    error=function(cond) {
+        message(paste("Escapement file does not seem to exist, so get it from the KNB."))
+        esc <- read.csv(url(data_url, method = "libcurl"), stringsAsFactors = FALSE)
+        write.csv(esc,"data/escapement.csv", row.names=FALSE) #if data isn't local then save a copy
+        return(esc)
+    }
+)
+
+head(esc) 
+#trycatch will read data in locally, but when an error happens it sends a message about that error and uses the url (local copy will be faster but a collaborator may not have it)
+```
+
+Exercise: annual escapement by species, region and year
+  * only for Sockeye, Chinook, Coho, Pink and Chum
+
+```{r}
+split_year<- esc %>% 
+  separate(sampleDate, into = c("Year", "Month", "Day"), sep="-") %>% 
+  mutate(Year=as.numeric(Year))
+```
+
+```{r}
+annual_escap <- split_year %>% 
+ filter(Species =="Sockeye" | Species== "Chinook" | Species == "Coho"| Species== "Pink"|Species== "Chum") %>%  
+  #filter(Species %in% c("Sokeye","Chinook","Coho","Pink","Chum"))
+  group_by(SASAP.Region, Species, Year) %>% 
+  summarise(escap = sum(DailyCount))
+
+head(annual_escap)
+
+# try a different version
+annual_escap2 <- split_year %>% 
+ filter(Species !="Pink") %>%  # would need to list more than pink
+  group_by(SASAP.Region, Species, Year) %>% 
+  summarise(escap = sum(DailyCount))
+
+head(annual_escap2)
+```
+
+
+# create static plots
+
+```{r}
+ggplot(annual_escap, mapping = aes(x=Species, y=escap))+
+  geom_col(fill="blue")
+```
+
+```{r}
+ggplot(annual_escap, mapping = aes(x=Species, y=escap, fill=SASAP.Region))+
+  geom_col()
+```
+
+```{r}
+kodiak<-annual_escap %>% 
+  filter(SASAP.Region =="Kodiak")  
+
+pal<-c("blue", "green", "orange", "red", "purple")
+
+ggplot(kodiak, mapping = aes(x=Year, y=escap, color=Species))+
+  geom_line()+
+  geom_point()+
+  scale_y_continuous(labels = comma)+
+  scale_color_manual(values = pal)+
+  ylab("Escapement")+
+  ggtitle("Kodiak")+
+  theme_bw()+ #default theme must be called first or will overwrite theme()
+  theme(legend.position = "bottom")
+```
+
+```{r, fig.height=7, fig.width=4}
+p<-ggplot(annual_escap, mapping = aes(x=Year, y=escap, color=Species))+
+  geom_line()+
+  geom_point()+
+  facet_wrap(~SASAP.Region, ncol=2, scales="free_y")+
+  scale_y_continuous(labels=comma)+
+  ylab("Escapement")+
+  theme_bw()+
+  theme(legend.position = "top")
+p
+ggsave("fig.png", p, height =7, width = 7, units = "in", dpi=350)
+```
+
+# create and interactive table
+```{r}
+locations <- esc %>% 
+  distinct(Location, Latitude, Longitude) %>% 
+  drop_na()
+```
+
+```{r}
+datatable(locations)
+```
+
+# create an interactive map
+
+```{r}
+leaflet(locations) %>% 
+  addTiles() %>% 
+  addMarkers(lng=~Longitude, lat=~Latitude, popup=~Location)
+```
+
+```{r}
+leaflet(locations) %>% 
+  addWMSTiles("https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv?", #webmap server (search tile server or ?addProviderTiles to find more)
+              layers = 'GEBCO_LATEST',
+              attribution = "Imagery reproduced from the GEBCO_2014 Grid, version 20150318, www.gebco.net") %>%
+  addCircleMarkers(lng = ~Longitude,
+                   lat = ~Latitude,
+                   popup = ~ Location,
+                   radius = 5,
+                   # set fill properties
+                   fillColor = "salmon",
+                   fillOpacity = 1,
+                   # set stroke properties
+                   stroke = T,
+                   weight = 0.5,
+                   color = "white",
+                   opacity = 1)
+
+```
+
