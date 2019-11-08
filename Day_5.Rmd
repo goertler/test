@@ -1,0 +1,229 @@
+---
+title: "spatial analysis"
+author: "Pascale"
+date: "11/8/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+libraries
+```{r}
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(leaflet)
+library(scales)
+library(ggmap)
+library(scales)
+library(ggmap)
+library(leaflet)
+```
+
+# prepare region shapefile
+```{r}
+ak_regions <- read_sf("data/shapefiles/ak_regions_simp.shp")
+
+plot(ak_regions)
+```
+
+datum is shape of sphere and projection is math used to flatten it
+```{r}
+st_crs(ak_regions) # check projection
+class(ak_regions)
+# switch projection to get rid of problem with international dateline
+ak_regions_3338 <- ak_regions %>% 
+  st_transform(crs = 3338) # crs is coordinate reference system
+plot(ak_regions_3338)
+```
+
+```{r}
+summary(ak_regions_3338)
+
+ak_regions_3338 %>% select(region)
+```
+
+# prepare the population data
+```{r}
+pop <- read.csv("data/shapefiles/alaska_population.csv", stringsAsFactors = FALSE)
+
+head(pop)
+```
+
+assuming WGS84 without metadata
+```{r}
+pop_4326 <- st_as_sf(pop,
+                     coords = c("lng", "lat"),
+                     crs = 4326,
+                     remove = FALSE)
+head(pop_4326)
+```
+
+transform to match shapfile
+```{r}
+pop_3338 <- pop_4326 %>% 
+  st_transform(crs = 3338)
+```
+
+# calculate population by region
+```{r}
+pop_joined <- st_join(pop_3338, ak_regions_3338, join = st_within)
+
+head(pop_joined)
+```
+
+total population by region
+```{r}
+pop_region <- pop_joined %>% 
+  as.data.frame() %>% # need to remove geometry because points that make polygon creates repition
+  group_by(region) %>% 
+  summarise(total_pop = sum(population))
+
+head(pop_region)
+```
+
+```{r}
+pop_region_3338 <- left_join(ak_regions_3338, pop_region)
+
+plot(pop_region_3338)
+```
+
+```{r}
+pop_mgmt <- pop_region_3338 %>% 
+  group_by(mgmt_area) %>% 
+  summarise(total_pop = sum(total_pop), do_union=FALSE)
+
+plot(pop_mgmt["total_pop"])
+```
+
+# make maps!
+```{r}
+rivers_3338 <- read_sf("data/shapefiles/ak_rivers_simp.shp")
+st_crs(rivers_3338)
+```
+
+```{r}
+ggplot()+
+  geom_sf(data = pop_region_3338, mapping = aes(fill=total_pop))+
+  geom_sf(data = pop_3338, mapping = aes(), size=0.5)+
+  geom_sf(data = rivers_3338, mapping = aes(size = StrOrder), color="grey")+
+  scale_size(range=c(0.01, 0.2), guide = FALSE)+
+  theme_bw()+
+  labs(fill="Total Population")+
+  scale_fill_continuous(low = "khaki", high="firebrick", labels=comma)
+```
+
+incorporate basemap
+```{r}
+pop_3857 <- pop_3338 %>% 
+  st_transform(crs = 3857)
+```
+
+```{r}
+# Define a function to fix the bbox to be in EPSG:3857
+# See https://github.com/dkahle/ggmap/issues/160#issuecomment-397055208
+ggmap_bbox_to_3857 <- function(map) {
+  if (!inherits(map, "ggmap")) stop("map must be a ggmap object")
+  # Extract the bounding box (in lat/lon) from the ggmap to a numeric vector, 
+  # and set the names to what sf::st_bbox expects:
+  map_bbox <- setNames(unlist(attr(map, "bb")), 
+                       c("ymin", "xmin", "ymax", "xmax"))
+  
+  # Coonvert the bbox to an sf polygon, transform it to 3857, 
+  # and convert back to a bbox (convoluted, but it works)
+  bbox_3857 <- st_bbox(st_transform(st_as_sfc(st_bbox(map_bbox, crs = 4326)), 3857))
+  
+  # Overwrite the bbox of the ggmap object with the transformed coordinates 
+  attr(map, "bb")$ll.lat <- bbox_3857["ymin"]
+  attr(map, "bb")$ll.lon <- bbox_3857["xmin"]
+  attr(map, "bb")$ur.lat <- bbox_3857["ymax"]
+  attr(map, "bb")$ur.lon <- bbox_3857["xmax"]
+  map
+}
+```
+
+```{r}
+bbox <- c(-170, 52, -130, 64)
+ak_map <- get_stamenmap(bbox, zoom = 4)
+ak_map_3857 <- ggmap_bbox_to_3857(ak_map)
+```
+
+```{r}
+ggmap(ak_map_3857)+
+  geom_sf(data = pop_3857, aes(color = population), inherit.aes = FALSE)+
+  scale_color_continuous(low = "khaki", high = "firebrick", labels = comma)
+
+```
+
+# leaflet
+custom function for alaska
+```{r}
+epsg3338 <- leaflet::leafletCRS(
+  crsClass = "L.Proj.CRS",
+  code = "EPSG:3338",
+  proj4def =  "+proj=aea +lat_1=55 +lat_2=65 +lat_0=50 +lon_0=-154 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
+  resolutions = 2^(16:7))
+```
+
+```{r}
+pop_region_4326 <- pop_region_3338 %>% 
+  st_transform(crs = 4326)
+```
+
+```{r}
+leaflet(options = leafletOptions(crs = epsg3338)) %>%
+        addPolygons(data = pop_region_4326, 
+                    fillColor = "gray",
+                    weight = 1)
+```
+
+example 1 color palette
+```{r}
+pal <- colorNumeric(palette = "Reds", domain = pop_region_4326$total_pop)
+
+m <- leaflet(options = leafletOptions(crs = epsg3338)) %>%
+        addPolygons(data = pop_region_4326, 
+                    fillColor = ~pal(total_pop),
+                    weight = 1,
+                    color = "black",
+                    fillOpacity = 1,
+                    label = ~region) %>% 
+        addLegend(position = "bottomleft",
+                  pal = pal,
+                  values = range(pop_region_4326$total_pop),
+                  title = "Total Population")
+
+m
+```
+
+example 2 markers sized by population
+```{r}
+pal <- colorNumeric(palette = "Reds", domain = pop_region_4326$total_pop)
+
+m <- leaflet(options = leafletOptions(crs = epsg3338)) %>%
+        addPolygons(data = pop_region_4326, 
+                    fillColor = ~pal(total_pop),
+                    weight = 1,
+                    color = "black",
+                    fillOpacity = 1) %>% 
+        addCircleMarkers(data = pop_4326,
+                         lat = ~lat,
+                         lng = ~lng,
+                         radius = ~log(population/500), # arbitrary scaling
+                         fillColor = "gray",
+                         fillOpacity = 1,
+                         weight = 0.25,
+                         color = "black",
+                         label = ~paste0(pop_4326$city, ", population ", comma(pop_4326$population))) %>%
+        addLegend(position = "bottomleft",
+                  pal = pal,
+                  values = range(pop_region_4326$total_pop),
+                  title = "Total Population")
+
+m
+```
+

@@ -51,6 +51,6 @@ server <- function(input, output) {
             theme_light()
     })
 }
-
+# aes_string(x="CTD_Depth", y=input$variable) #will 
 # Run the application 
 shinyApp(ui = ui, server = server)
