@@ -1,0 +1,84 @@
+---
+title: "Day_4_exercise"
+author: "Pascale"
+date: "11/7/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+load data
+```{r}
+escap <- read.csv(url("https://knb.ecoinformatics.org/knb/d1/mn/v2/object/urn%3Auuid%3Af119a05b-bbe7-4aea-93c6-85434dcb1c5e", method = "libcurl"),
+                    stringsAsFactors = FALSE)
+
+goals <- read.csv(url("https://knb.ecoinformatics.org/knb/d1/mn/v2/object/knb.92014.1", method = "libcurl"),
+                    stringsAsFactors = FALSE)
+head(escap)
+head(goals)
+```
+
+bristol bay sockeye only
+total escapement by year and stock
+```{r}
+unique(escap$SASAP.Region)
+
+bb_escap <- escap %>% 
+  filter(SASAP.Region == "Bristol Bay") %>%  
+  filter(Species == "Sockeye") %>%  
+  separate(sampleDate, into = c("Year", "Month", "Day"), sep="-") %>% 
+  mutate(Year=as.numeric(Year)) %>% 
+  group_by(Location, Year) %>% 
+  summarise(annual_escap = sum(DailyCount))
+
+head(bb_escap)
+```
+
+```{r}
+unique(goals$Region)
+unique(goals$Species)
+
+bb_goals <- goals %>% 
+  filter(Region == "Bristol Bay") %>% 
+  filter(Species == "Sockeye") %>% 
+  mutate(Initial.Year=as.numeric(Initial.Year)) %>% 
+  mutate(Lower = ifelse(Lower =="eliminated", NA, Lower))%>% 
+  mutate(Lower=as.numeric(Lower)) %>% 
+  rename(Location = System)
+
+```
+
+stocks (system or location) with escapement goals
+join tables
+```{r}
+# inner_join will remove NAs/unmatched
+joined <- inner_join(bb_escap, bb_goals, by ="Location") %>% 
+  filter(Type != "OEG") %>% 
+  filter(Initial.Year <= Year)
+
+head(joined)
+stocks.w.goals<-unique(joined$Location)
+stocks.w.goals
+```
+
+
+list proportion of years by location when goals are met
+```{r}
+goals.met<- joined %>% 
+  filter(Lower <= annual_escap & Upper >= annual_escap) 
+
+goals.met<- joined %>% 
+  mutate(inside = (annual_escap > Lower & annual_escap <Upper))
+```
+
+
+
